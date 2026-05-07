@@ -1,6 +1,6 @@
 # Skew-Stickiness Ratio (SSR)
 
-[![CI](https://github.com/fbourgey/ssr-dev/actions/workflows/ci.yml/badge.svg)](https://github.com/fbourgey/ssr-dev/actions/workflows/ci.yml)
+[![CI](https://github.com/fbourgey/ssr/actions/workflows/ci.yml/badge.svg)](https://github.com/fbourgey/ssr/actions/workflows/ci.yml)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue.svg)](https://www.python.org/downloads/)
 [![uv](https://img.shields.io/badge/package%20manager-uv-6340ac.svg)](https://docs.astral.sh/uv/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
