@@ -1,0 +1,19 @@
+[project]
+name = "ssr"
+version = "0.1.0"
+description = "Skew Stickiness Ratio in Stochastic Volatility Models."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "ipykernel>=7.2.0",
+    "jupyter>=1.1.1",
+    "numba>=0.65.0",
+    "numfracpy>=0.4",
+    "numpy>=2.4.3",
+    "pandas>=3.0.1",
+    "pymittagleffler>=0.2.0",
+    "pytest>=9.0.2",
+    "ruff>=0.15.12",
+    "scipy>=1.17.1",
+    "seaborn>=0.13.2",
+]
