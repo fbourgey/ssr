@@ -31,6 +31,16 @@ uv run pytest
 
 The `ssr_expansions_*` notebooks reproduce results from *Refined expansions of the skew-stickiness ratio in stochastic volatility models*; `smile_dynamics_and_rough_vol.ipynb` reproduces results from *Smile Dynamics and Rough Volatility*.
 
+| Notebook | Description |
+| --- | --- |
+| [ssr_expansions_heston.ipynb](ssr_expansions_heston.ipynb) | Heston SSR expansions, calibrated examples, and approximation errors. |
+| [ssr_expansions_rheston.ipynb](ssr_expansions_rheston.ipynb) | Rough Heston SSR expansions and numerical checks. |
+| [ssr_expansions_rbergomi.ipynb](ssr_expansions_rbergomi.ipynb) | Rough Bergomi SSR expansions, approximation errors, and time-step sensitivity. |
+| [ssr_expansions_two_bergomi.ipynb](ssr_expansions_two_bergomi.ipynb) | Two-factor Bergomi SSR expansions with benchmark and calibrated parameters. |
+| [smile_dynamics_and_rough_vol.ipynb](smile_dynamics_and_rough_vol.ipynb) | Smile dynamics figures for Bergomi and rough Heston models, with market comparisons. |
+| [xi0.ipynb](xi0.ipynb) | Calibrated initial forward variance curves for all models. |
+| [checks.ipynb](checks.ipynb) | Numerical comparisons of SSR, ATM skew, and implied volatility methods. |
+
 Model code and calibrated inputs are in [`src/ssr/`](src/ssr/). Generated plots are stored under [`figures/`](figures/).
 
 ## License
