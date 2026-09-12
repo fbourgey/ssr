@@ -25,8 +25,8 @@ _ML_TWO_ARRAY_CACHE = OrderedDict()
 
 
 def _as_maturity_array(T):
-    """Return maturity input as at least one-dimensional array."""
-    return np.atleast_1d(np.asarray(T))
+    """Return maturity input as at least one-dimensional floating-point array."""
+    return np.atleast_1d(np.asarray(T, dtype=float))
 
 
 @lru_cache(maxsize=4096)

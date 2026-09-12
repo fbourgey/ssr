@@ -42,6 +42,24 @@ def test_charfunc_vectorized_maturities_match_scalar_calls():
     assert np.allclose(vectorized, scalar)
 
 
+@pytest.mark.parametrize("T", [1, [1, 2], np.array([1, 2])])
+def test_ssr_integer_maturities_match_float_maturities(T):
+    params = {"eta": 0.2, "H": 0.1, "rho": -0.65, "kappa": 0.0}
+    rheston = RoughHestonModel(params=params, xi0=lambda t: 0.04 * np.ones_like(t))
+    kwargs = {"n_pade": 3, "n_quad": 20}
+    T_float = np.asarray(T, dtype=float)
+
+    expected = rheston.ssr_all(T_float, **kwargs)
+    actual = rheston.ssr_all(T, **kwargs)
+    direct = rheston.ssr_cf(T, **kwargs)
+
+    assert np.issubdtype(direct.dtype, np.floating)
+    assert direct.shape == np.atleast_1d(T_float).shape
+    np.testing.assert_allclose(direct, expected["ssr_cf"])
+    for key in expected:
+        np.testing.assert_allclose(actual[key], expected[key])
+
+
 def test_charfunc_rejects_invalid_pade_order():
     params = {"eta": 0.4, "H": 0.1, "rho": -0.65, "kappa": 1.0}
     rheston = RoughHestonModel(params=params, xi0=lambda t: 0.04 * np.ones_like(t))
