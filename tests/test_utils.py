@@ -25,6 +25,30 @@ def test_black_impvol_recovers_vector_vols():
     assert np.allclose(impvol, vol, atol=1e-8)
 
 
+@pytest.mark.parametrize("shape", [(2, 3), (2, 2, 3)])
+@pytest.mark.parametrize("opttype", [1, np.array([-1, 1, 1])])
+def test_black_impvol_recovers_multidimensional_vols(shape, opttype):
+    K = np.linspace(0.8, 1.2, np.prod(shape)).reshape(shape)
+    vol = np.linspace(0.15, 0.35, K.size).reshape(shape)
+    value = black_price(K=K, T=1.5, F=1.0, vol=vol, opttype=opttype)
+
+    actual = black_impvol(K=K, T=1.5, F=1.0, value=value, opttype=opttype)
+
+    assert actual.shape == shape
+    np.testing.assert_allclose(actual, vol, atol=1e-8)
+
+
+def test_black_impvol_multidimensional_invalid_prices_preserve_positions():
+    K = np.array([[0.9, 1.0], [1.1, 1.2]])
+    value = black_price(K=K, T=1.0, F=1.0, vol=0.2)
+    value[0, 1] = np.nan
+    value[1, 0] = 2.0
+
+    actual = black_impvol(K=K, T=1.0, F=1.0, value=value)
+
+    np.testing.assert_allclose(actual, [[0.2, np.nan], [np.nan, 0.2]], atol=1e-8)
+
+
 def test_black_price_handles_zero_time_and_invalid_inputs():
     price = black_price(
         K=np.array([0.9, 1.1, -1.0]),

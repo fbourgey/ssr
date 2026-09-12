@@ -9,8 +9,8 @@ Python research code for reproducing skew-stickiness ratio (SSR) results in stoc
 
 ## References
 
-- Bourgey, F., Delemotte, J., & De Marco, S. (2026). *Refined expansions of the skew-stickiness ratio in stochastic volatility models*. [**Quantitative Finance**](https://doi.org/10.1080/14697688.2026.2714860), 1–18. Taylor & Francis. [SSRN 5387754](https://papers.ssrn.com/sol3/papers.cfm?abstract_id=5387754).
 - Bourgey, F., De Marco, S., & Delemotte, J. (2024). *Smile Dynamics and Rough Volatility*. [SSRN 4911186](https://papers.ssrn.com/sol3/papers.cfm?abstract_id=4911186).
+- Bourgey, F., Delemotte, J., & De Marco, S. (2026). *Refined expansions of the skew-stickiness ratio in stochastic volatility models*. [**Quantitative Finance**](https://doi.org/10.1080/14697688.2026.2714860), 1–18. Taylor & Francis. [SSRN 5387754](https://papers.ssrn.com/sol3/papers.cfm?abstract_id=5387754).
 - Fukasawa, M. (2026). *On the Skew Stickiness Ratio*. [arXiv:2602.05241v2](https://arxiv.org/abs/2602.05241v2).
 
 ## Setup

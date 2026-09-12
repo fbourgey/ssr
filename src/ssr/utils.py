@@ -158,6 +158,11 @@ def black_impvol(
     if T <= 0 or F <= 0:
         return np.full_like(K, np.nan, dtype=float)
 
+    output_shape = K.shape
+    K = K.ravel()
+    value = value.ravel()
+    opttype = opttype.ravel()
+
     low = IMPVOL_MIN * np.ones_like(K, dtype=float)
     high = IMPVOL_MAX * np.ones_like(K, dtype=float)
     mid = 0.5 * (low + high)
@@ -176,7 +181,7 @@ def black_impvol(
 
     for _ in range(MAX_ITER):
         if not np.any(active):
-            return impvol
+            return impvol.reshape(output_shape)
 
         active_idx = np.flatnonzero(active)
         price = black_price(K[active_idx], T, F, mid[active_idx], opttype[active_idx])
@@ -202,7 +207,7 @@ def black_impvol(
         stacklevel=2,
     )
 
-    return impvol
+    return impvol.reshape(output_shape)
 
 
 def lewis_formula_otm_price(phi, k, T, epsrel: float = 1e-10, limit: int = 1000):
