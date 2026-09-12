@@ -8,8 +8,8 @@ from scipy.special import gamma
 from scipy.integrate import quad_vec
 from pymittagleffler import mittag_leffler
 
-import pade
-from model import (
+from . import pade
+from .model import (
     ForwardVarianceModel,
     require_params,
     validate_interval,
@@ -17,7 +17,7 @@ from model import (
     validate_positive,
     validate_positive_n_quad,
 )
-from utils import gauss_legendre, jacobi_quadrature
+from .utils import gauss_legendre, jacobi_quadrature
 
 
 ML_TWO_ARRAY_CACHE_SIZE = 16

@@ -3,13 +3,13 @@ import pandas as pd
 import pytest
 from scipy.special import roots_jacobi
 
-from utils import black_impvol, black_otm_impvol_mc, black_price
-from utils import cholesky_from_svd
-from utils import gauss_hermite, gauss_legendre
-from utils import implied_vol_from_paths
-from utils import jacobi_quadrature
-from utils import lewis_formula_otm_price, mittag_leffler_two
-from utils import non_uniform_grid, plot_ivols_mc
+from ssr.utils import black_impvol, black_otm_impvol_mc, black_price
+from ssr.utils import cholesky_from_svd
+from ssr.utils import gauss_hermite, gauss_legendre
+from ssr.utils import implied_vol_from_paths
+from ssr.utils import jacobi_quadrature
+from ssr.utils import lewis_formula_otm_price, mittag_leffler_two
+from ssr.utils import non_uniform_grid, plot_ivols_mc
 
 
 def test_black_impvol_recovers_vector_vols():

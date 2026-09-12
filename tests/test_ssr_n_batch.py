@@ -1,10 +1,10 @@
 import numpy as np
 import pytest
 
-import model as model_module
-from model import _atm_impvol_from_path_integrals
-from rough_bergomi import RoughBergomiModel
-from utils import implied_vol_from_paths
+from ssr import model as model_module
+from ssr.model import _atm_impvol_from_path_integrals
+from ssr.rough_bergomi import RoughBergomiModel
+from ssr.utils import implied_vol_from_paths
 
 
 def _flat_xi0(t):

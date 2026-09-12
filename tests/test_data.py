@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from data import (
+from ssr.data import (
     available_dates,
     available_models,
     get_params,

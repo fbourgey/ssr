@@ -1,7 +1,10 @@
 import pytest
 import numpy as np
-import rough_bergomi
-from rough_bergomi import RoughBergomiModel, _rough_bergomi_integrals_from_normal_jit
+from ssr import rough_bergomi
+from ssr.rough_bergomi import (
+    RoughBergomiModel,
+    _rough_bergomi_integrals_from_normal_jit,
+)
 
 
 def test_constructor_preserves_s0():

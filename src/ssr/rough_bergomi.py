@@ -6,7 +6,7 @@ import numpy as np
 from scipy.linalg import blas
 from scipy.special import hyp2f1
 
-from model import (
+from .model import (
     ForwardVarianceModel,
     MonteCarloConfig,
     SsrMonteCarloConfig,
@@ -17,7 +17,7 @@ from model import (
     validate_positive,
     validate_positive_n_quad,
 )
-from utils import cholesky_from_svd, gauss_legendre, jacobi_quadrature
+from .utils import cholesky_from_svd, gauss_legendre, jacobi_quadrature
 
 
 @njit(cache=True, parallel=True)

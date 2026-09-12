@@ -6,7 +6,7 @@ import numpy as np
 from scipy import stats
 from scipy.integrate import quad
 
-from utils import (
+from .utils import (
     black_impvol,
     black_price,
     gauss_legendre,

@@ -1,6 +1,6 @@
 import pytest
 import numpy as np
-from two_bergomi import (
+from ssr.two_bergomi import (
     TwoFactorBergomiModel,
     _func_I,
     _ou_factor_paths,
@@ -96,7 +96,7 @@ def test_flat_bg_components_skip_quadrature(monkeypatch):
     def fail_if_quadrature_is_used(*args, **kwargs):
         raise AssertionError("flat components should use closed forms")
 
-    monkeypatch.setattr("two_bergomi.gauss_legendre", fail_if_quadrature_is_used)
+    monkeypatch.setattr("ssr.two_bergomi.gauss_legendre", fail_if_quadrature_is_used)
 
     assert np.allclose(
         two_bergomi._beta_1_gauss_quad(Ts, n_quad=30),

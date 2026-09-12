@@ -1,6 +1,11 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
 [project]
 name = "ssr"
 version = "0.1.0"
+authors = [{ name = "Florian Bourgey", email = "fb2615@nyu.edu" }]
 description = "Skew Stickiness Ratio in Stochastic Volatility Models."
 readme = "README.md"
 requires-python = ">=3.12"
@@ -17,3 +22,9 @@ dependencies = [
     "scipy>=1.17.1",
     "seaborn>=0.13.2",
 ]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/ssr"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

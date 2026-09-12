@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from heston import HestonModel
+from ssr.heston import HestonModel
 
 
 def test_bg_closed_forms_match_gauss_quadrature():

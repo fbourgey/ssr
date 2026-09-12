@@ -3,7 +3,7 @@ from collections.abc import Callable
 from numba import float64, njit, prange, vectorize
 import numpy as np
 
-from model import (
+from .model import (
     ForwardVarianceModel,
     MonteCarloConfig,
     SsrMonteCarloConfig,
@@ -14,7 +14,7 @@ from model import (
     validate_positive,
     validate_positive_n_quad,
 )
-from utils import gauss_legendre
+from .utils import gauss_legendre
 from scipy.integrate import quad
 
 

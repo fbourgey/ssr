@@ -1,7 +1,7 @@
 import pytest
 import numpy as np
-import rough_heston
-from rough_heston import RoughHestonModel
+from ssr import rough_heston
+from ssr.rough_heston import RoughHestonModel
 
 
 @pytest.mark.parametrize("Ts", [np.linspace(1e-3, 5.0, 5)])

@@ -2,7 +2,7 @@ import numpy as np
 from numba import float64, njit, vectorize
 from scipy.integrate import quad_vec
 
-from model import (
+from .model import (
     ForwardVarianceModel,
     require_params,
     validate_interval,

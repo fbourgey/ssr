@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-import pade
+from ssr import pade
 
 
 @pytest.mark.parametrize(

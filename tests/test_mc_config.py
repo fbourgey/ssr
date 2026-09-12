@@ -1,9 +1,9 @@
 import numpy as np
 import pytest
 
-from model import MonteCarloConfig, SsrMonteCarloConfig
-from rough_bergomi import RoughBergomiModel
-from two_bergomi import TwoFactorBergomiModel
+from ssr.model import MonteCarloConfig, SsrMonteCarloConfig
+from ssr.rough_bergomi import RoughBergomiModel
+from ssr.two_bergomi import TwoFactorBergomiModel
 
 
 def _flat_xi0(t):
