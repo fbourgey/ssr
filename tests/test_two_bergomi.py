@@ -319,6 +319,8 @@ def test_two_bergomi_integrals_jit_matches_vectorized_reduction():
         )
     )
 
+    kappa = model._fukasawa_kernel(tab_t)
+
     actual = _two_bergomi_integrals_from_normal_jit(
         normal,
         xi0_t,
@@ -339,6 +341,8 @@ def test_two_bergomi_integrals_jit_matches_vectorized_reduction():
         model.alpha,
         weight1,
         weight2,
+        True,
+        kappa,
         True,
     )
 
@@ -369,7 +373,92 @@ def test_two_bergomi_integrals_jit_matches_vectorized_reduction():
         0.5 * dt * np.sum(v_ssr_prev + v_next * shift_factor[1:, np.newaxis], axis=0)
     )
 
+    expected_int_sqrt_v_k_dw = np.sum(
+        np.sqrt(v_prev) * kappa[:-1, np.newaxis] * dw, axis=0
+    )
+    expected_int_v_k_dt = (
+        0.5
+        * dt
+        * np.sum(
+            v_prev * kappa[:-1, np.newaxis] + v_next * kappa[1:, np.newaxis], axis=0
+        )
+    )
+
     assert np.allclose(actual[0], expected_int_v_dt)
     assert np.allclose(actual[1], expected_int_sqrt_v_dw)
     assert np.allclose(actual[2], expected_int_v_dt_shifted)
     assert np.allclose(actual[3], expected_int_sqrt_v_dw_shifted)
+    assert np.allclose(actual[4], expected_int_sqrt_v_k_dw)
+    assert np.allclose(actual[5], expected_int_v_k_dt)
+
+
+def test_fukasawa_kernel_matches_kernel():
+    model = TwoFactorBergomiModel(
+        params=NONFLAT_PARAMS, xi0=lambda t: 0.04 + 0.01 * np.asarray(t)
+    )
+    tab_t = np.array([0.0, 0.2, 0.7, 1.5])
+
+    def k(s):
+        return (
+            model.w
+            * model.alpha
+            * (
+                (1.0 - model.theta) * model.rhoS1 * np.exp(-model.k1 * s)
+                + model.theta * model.rhoS2 * np.exp(-model.k2 * s)
+            )
+        )
+
+    expected = k(tab_t)
+    actual = model._fukasawa_kernel(tab_t)
+    assert np.allclose(actual, expected)
+
+
+def test_ssr_fukasawa_close_to_finite_difference_ssr():
+    model = TwoFactorBergomiModel(
+        params=FLAT_PARAMS, xi0=lambda t: 0.2**2 * np.ones_like(t)
+    )
+    T = np.array([0.5, 1.0])
+    out_fd = model.ssr_all(
+        T=T, n_mc=100_000, n_disc=100, eps_ssr=1e-3, n_quad=20, seed=1
+    )
+    out_fukasawa = model.ssr_fukasawa_all(T=T, n_mc=100_000, n_disc=100, seed=1)
+
+    assert np.allclose(out_fukasawa["ssr_fukasawa"], out_fd["ssr_fd"], atol=0.1)
+
+
+def test_ssr_fukasawa_refines_toward_finite_difference_ssr():
+    model = TwoFactorBergomiModel(
+        params=FLAT_PARAMS, xi0=lambda t: 0.2**2 * np.ones_like(t)
+    )
+    T = np.array([1.0])
+    n_mc = 40_000
+    out_fd = model.ssr_all(T=T, n_mc=n_mc, n_disc=200, eps_ssr=1e-3, n_quad=20, seed=1)
+    out_coarse = model.ssr_fukasawa_all(T=T, n_mc=n_mc, n_disc=25, seed=1)
+    out_fine = model.ssr_fukasawa_all(T=T, n_mc=n_mc, n_disc=200, seed=1)
+
+    coarse_error = np.abs(out_coarse["ssr_fukasawa"] - out_fd["ssr_fd"])
+    fine_error = np.abs(out_fine["ssr_fukasawa"] - out_fd["ssr_fd"])
+
+    assert np.all(fine_error < coarse_error)
+
+
+@pytest.mark.parametrize("n_loop", [1, 2])
+def test_fukasawa_includes_first_stochastic_interval(n_loop):
+    model = TwoFactorBergomiModel(
+        params=NONFLAT_PARAMS, xi0=lambda t: 0.04 * np.ones_like(t)
+    )
+    paths = model.simulate_mc(
+        tab_t=np.array([0.0, 0.2]),
+        n_mc=8,
+        n_loop=n_loop,
+        seed=123,
+        eval_fukasawa=True,
+    )
+    k0 = (
+        model.w
+        * model.alpha
+        * ((1.0 - model.theta) * model.rhoS1 + model.theta * model.rhoS2)
+    )
+    expected = k0 * paths["int_sqrt_v_dw"]
+    assert np.any(expected != 0.0)
+    np.testing.assert_allclose(paths["int_sqrt_v_k_dw"], expected)

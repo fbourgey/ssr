@@ -40,6 +40,8 @@ def _two_bergomi_integrals_from_normal_jit(
     weight1,
     weight2,
     eval_ssr,
+    kappa,
+    eval_fukasawa,
 ):
     n_disc = normal.shape[1]
     n_paths = normal.shape[2]
@@ -47,6 +49,8 @@ def _two_bergomi_integrals_from_normal_jit(
     int_sqrt_v_dw = np.empty(n_paths)
     int_v_dt_shifted = np.empty(n_paths)
     int_sqrt_v_dw_shifted = np.empty(n_paths)
+    int_sqrt_v_k_dw = np.empty(n_paths)
+    int_v_k_dt = np.empty(n_paths)
 
     for j in prange(n_paths):
         x1_prev = x1_0
@@ -59,6 +63,8 @@ def _two_bergomi_integrals_from_normal_jit(
         sum_sqrt_v_dw = 0.0
         sum_v_dt_shifted = 0.0
         sum_sqrt_v_dw_shifted = 0.0
+        sum_sqrt_v_k_dw = 0.0
+        sum_v_k_dt = 0.0
 
         for i in range(n_disc):
             z1 = normal[0, i, j]
@@ -85,6 +91,12 @@ def _two_bergomi_integrals_from_normal_jit(
                 sum_sqrt_v_dw_shifted += np.sqrt(shift_prev * v_prev) * dw
                 sum_v_dt_shifted += shift_prev * v_prev + shift_next * v_next
 
+            if eval_fukasawa:
+                # Trapezoidal drift and left-point stochastic integral,
+                # including the first interval.
+                sum_v_k_dt += 0.5 * dt * (v_prev * kappa[i] + v_next * kappa[i + 1])
+                sum_sqrt_v_k_dw += np.sqrt(v_prev) * kappa[i] * dw
+
             x1_prev = x1_next
             x2_prev = x2_next
             v_prev = v_next
@@ -93,8 +105,17 @@ def _two_bergomi_integrals_from_normal_jit(
         int_sqrt_v_dw[j] = sum_sqrt_v_dw
         int_v_dt_shifted[j] = 0.5 * dt * sum_v_dt_shifted
         int_sqrt_v_dw_shifted[j] = sum_sqrt_v_dw_shifted
+        int_sqrt_v_k_dw[j] = sum_sqrt_v_k_dw
+        int_v_k_dt[j] = sum_v_k_dt
 
-    return int_v_dt, int_sqrt_v_dw, int_v_dt_shifted, int_sqrt_v_dw_shifted
+    return (
+        int_v_dt,
+        int_sqrt_v_dw,
+        int_v_dt_shifted,
+        int_sqrt_v_dw_shifted,
+        int_sqrt_v_k_dw,
+        int_v_k_dt,
+    )
 
 
 class TwoFactorBergomiModel(ForwardVarianceModel):
@@ -230,6 +251,7 @@ class TwoFactorBergomiModel(ForwardVarianceModel):
         seed=None,
         conditioning: bool = False,
         eps_ssr: float = 0.0,
+        eval_fukasawa: bool = False,
     ) -> dict:
 
         rng = np.random.default_rng(seed)
@@ -325,6 +347,12 @@ class TwoFactorBergomiModel(ForwardVarianceModel):
                 )
             )
 
+        kappa = np.zeros(n_disc + 1)
+        if eval_fukasawa:
+            int_sqrt_v_k_dw = np.zeros(n_mc)
+            int_v_k_dt = np.zeros(n_mc)
+            kappa = self._fukasawa_kernel(tab_t)
+
         for i in range(n_loop):
             sl = slice(i * n_mc_loop, (i + 1) * n_mc_loop)
             normal = rng.normal(0, 1, (3, n_disc, n_mc_loop))
@@ -334,6 +362,8 @@ class TwoFactorBergomiModel(ForwardVarianceModel):
                 int_sqrt_v_dw[sl],
                 int_v_dt_shifted_loop,
                 int_sqrt_v_dw_shifted_loop,
+                int_sqrt_v_k_dw_loop,
+                int_v_k_dt_loop,
             ) = _two_bergomi_integrals_from_normal_jit(
                 normal,
                 xi0_t,
@@ -355,11 +385,17 @@ class TwoFactorBergomiModel(ForwardVarianceModel):
                 weight1,
                 weight2,
                 eval_ssr,
+                kappa,
+                eval_fukasawa,
             )
 
             if eval_ssr:
                 int_v_dt_shifted[sl] = int_v_dt_shifted_loop
                 int_sqrt_v_dw_shifted[sl] = int_sqrt_v_dw_shifted_loop
+
+            if eval_fukasawa:
+                int_sqrt_v_k_dw[sl] = int_sqrt_v_k_dw_loop
+                int_v_k_dt[sl] = int_v_k_dt_loop
 
         out = {
             "int_v_dt": int_v_dt,
@@ -369,6 +405,10 @@ class TwoFactorBergomiModel(ForwardVarianceModel):
         if eval_ssr:
             out["int_v_dt_shifted"] = int_v_dt_shifted
             out["int_sqrt_v_dw_shifted"] = int_sqrt_v_dw_shifted
+
+        if eval_fukasawa:
+            out["int_sqrt_v_k_dw"] = int_sqrt_v_k_dw
+            out["int_v_k_dt"] = int_v_k_dt
 
         return out
 
@@ -489,6 +529,10 @@ class TwoFactorBergomiModel(ForwardVarianceModel):
         return (1.0 - self.theta) * self.rhoS1 * np.exp(
             -self.k1 * tau
         ) + self.theta * self.rhoS2 * np.exp(-self.k2 * tau)
+
+    def _fukasawa_kernel(self, tab_t) -> np.ndarray:
+        """Theorem 2 kernel at all grid points, including zero."""
+        return self.w * self.alpha * self._factor_kernel(np.asarray(tab_t))
 
     def _beta_1_gauss_quad(self, T, n_quad: int):
         """First-order beta coefficient using Gauss quadrature."""

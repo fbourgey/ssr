@@ -29,6 +29,8 @@ def _rough_bergomi_integrals_from_normal_jit(
     dt,
     eta,
     eval_ssr,
+    kappa,
+    eval_fukasawa,
 ):
     n_disc = xi0_t.shape[0] - 1
     n_paths = normal.shape[1]
@@ -36,12 +38,16 @@ def _rough_bergomi_integrals_from_normal_jit(
     int_sqrt_v_dw = np.empty(n_paths)
     int_v_dt_shifted = np.empty(n_paths)
     int_sqrt_v_dw_shifted = np.empty(n_paths)
+    int_sqrt_v_k_dw = np.empty(n_paths)
+    int_v_k_dt = np.empty(n_paths)
 
     for j in prange(n_paths):
         sum_v_dt = 0.0
         sum_sqrt_v_dw = 0.0
         sum_v_dt_shifted = 0.0
         sum_sqrt_v_dw_shifted = 0.0
+        sum_sqrt_v_k_dw = 0.0
+        sum_v_k_dt = 0.0
 
         for k in range(n_disc):
             y_prev = 0.0
@@ -68,12 +74,28 @@ def _rough_bergomi_integrals_from_normal_jit(
                 sum_v_dt_shifted += shift_prev * v_prev + shift_next * v_next
                 sum_sqrt_v_dw_shifted += np.sqrt(shift_prev) * sqrt_v_prev * dw
 
+            if eval_fukasawa:
+                # Right-point Euler for the time integral.  For the stochastic
+                # integral, omit [t_0, t_1] and use its left endpoint thereafter.
+                sum_v_k_dt += v_next * kappa[k] * dt
+                if k > 0:
+                    sum_sqrt_v_k_dw += sqrt_v_prev * kappa[k - 1] * dw
+
         int_v_dt[j] = 0.5 * dt * sum_v_dt
         int_sqrt_v_dw[j] = sum_sqrt_v_dw
         int_v_dt_shifted[j] = 0.5 * dt * sum_v_dt_shifted
         int_sqrt_v_dw_shifted[j] = sum_sqrt_v_dw_shifted
+        int_sqrt_v_k_dw[j] = sum_sqrt_v_k_dw
+        int_v_k_dt[j] = sum_v_k_dt
 
-    return int_v_dt, int_sqrt_v_dw, int_v_dt_shifted, int_sqrt_v_dw_shifted
+    return (
+        int_v_dt,
+        int_sqrt_v_dw,
+        int_v_dt_shifted,
+        int_sqrt_v_dw_shifted,
+        int_sqrt_v_k_dw,
+        int_v_k_dt,
+    )
 
 
 class RoughBergomiModel(ForwardVarianceModel):
@@ -272,6 +294,7 @@ class RoughBergomiModel(ForwardVarianceModel):
         seed: int | None = None,
         conditioning: bool = False,
         eps_ssr: float = 0.0,
+        eval_fukasawa: bool = False,
     ) -> dict:
         rng = np.random.default_rng(seed)
 
@@ -321,6 +344,13 @@ class RoughBergomiModel(ForwardVarianceModel):
                 ssr_shift_factor_next = ssr_shift_factor_t[1:, :]
                 ssr_sqrt_shift_factor_prev = np.sqrt(ssr_shift_factor_prev)
 
+        kappa_t_flat = np.zeros(n_disc)
+        if eval_fukasawa:
+            int_sqrt_v_k_dw = np.zeros(n_mc)
+            int_v_k_dt = np.zeros(n_mc)
+            kappa_t_flat = self._fukasawa_kernel_right_point(tab_t)
+            kappa_col = kappa_t_flat[:, np.newaxis]
+
         # Precompute Cholesky once (expensive)
         if not h_half:
             chol, chol_scales = self._cached_cholesky_transform(
@@ -364,6 +394,8 @@ class RoughBergomiModel(ForwardVarianceModel):
                     int_sqrt_v_dw[sl],
                     int_v_dt_shifted_loop,
                     int_sqrt_v_dw_shifted_loop,
+                    int_sqrt_v_k_dw_loop,
+                    int_v_k_dt_loop,
                 ) = _rough_bergomi_integrals_from_normal_jit(
                     normal,
                     xi0_t_flat,
@@ -372,10 +404,15 @@ class RoughBergomiModel(ForwardVarianceModel):
                     dt,
                     self.eta,
                     eval_ssr,
+                    kappa_t_flat,
+                    eval_fukasawa,
                 )
                 if eval_ssr:
                     int_v_dt_shifted[sl] = int_v_dt_shifted_loop
                     int_sqrt_v_dw_shifted[sl] = int_sqrt_v_dw_shifted_loop
+                if eval_fukasawa:
+                    int_sqrt_v_k_dw[sl] = int_sqrt_v_k_dw_loop
+                    int_v_k_dt[sl] = int_v_k_dt_loop
                 continue
 
             y *= self.eta
@@ -411,6 +448,12 @@ class RoughBergomiModel(ForwardVarianceModel):
                         )
                     )
 
+            if eval_fukasawa:
+                int_v_k_dt[sl] = dt * np.sum(v_next * kappa_col, axis=0)
+                int_sqrt_v_k_dw[sl] = np.sum(
+                    sqrt_v_prev[1:] * kappa_col[:-1] * dw[1:], axis=0
+                )
+
         out = {
             "int_v_dt": int_v_dt,
             "int_sqrt_v_dw": int_sqrt_v_dw,
@@ -419,6 +462,10 @@ class RoughBergomiModel(ForwardVarianceModel):
         if eval_ssr:
             out["int_v_dt_shifted"] = int_v_dt_shifted
             out["int_sqrt_v_dw_shifted"] = int_sqrt_v_dw_shifted
+
+        if eval_fukasawa:
+            out["int_sqrt_v_k_dw"] = int_sqrt_v_k_dw
+            out["int_v_k_dt"] = int_v_k_dt
 
         return out
 
@@ -463,6 +510,17 @@ class RoughBergomiModel(ForwardVarianceModel):
             rho_cond=self.rho if config.conditioning else None,
             n_batch=config.n_batch,
         )
+
+    def _fukasawa_kernel_right_point(self, tab_t) -> np.ndarray:
+        """
+        Right-point values kappa_i = k(t_{i+1}), where
+        k(s) = rho * eta * sqrt(2H) * s^{H - 1/2} is the kernel of Theorem 2
+        (Eq. 12, Remark 1) in Fukasawa (2026), "On the Skew Stickiness Ratio"
+        (arXiv:2602.05241). This avoids evaluating k(0), which is singular for
+        H < 1/2.
+        """
+        c = self.rho * self.eta * np.sqrt(2.0 * self.H)
+        return c * tab_t[1:] ** (self.H - 0.5)
 
     def xi0_shifted(self, u, eps):
         """Shifted initial forward variance curve for finite difference SSR."""

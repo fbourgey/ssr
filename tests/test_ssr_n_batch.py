@@ -1,8 +1,9 @@
 import numpy as np
 import pytest
+from scipy import stats
 
 from ssr import model as model_module
-from ssr.model import _atm_impvol_from_path_integrals
+from ssr.model import _atm_impvol_from_path_integrals, _black_atm_impvol_from_price
 from ssr.rough_bergomi import RoughBergomiModel
 from ssr.utils import implied_vol_from_paths
 
@@ -155,6 +156,90 @@ def test_ssr_mc_all_rejects_invalid_n_batch(n_batch):
             eps_ssr=0.1,
             n_batch=n_batch,
         )
+
+
+def test_ssr_fukasawa_all_batches_mean_and_confidence_intervals(monkeypatch):
+    model = _make_model()
+    seed = 123
+    n_batch = 3
+    batch_seeds = np.random.default_rng(seed).integers(0, 2**32 - 1, size=n_batch)
+
+    def fake_simulate_mc(**kwargs):
+        seed_value = int(kwargs["seed"])
+        level = (seed_value % 1000) / 100.0
+        # S_T = 1.0 for two paths, 1.0 + level for the other two, so that F, the
+        # digit and the kernel term all depend deterministically on `level`.
+        return {
+            "int_v_dt": np.log1p(level) * np.array([0.0, 0.0, 0.0, 0.0]) + 0.01,
+            "int_sqrt_v_dw": np.array([-level, -level, level, level]) * 0.1,
+            "int_sqrt_v_k_dw": np.array([0.02, 0.02, 0.02, 0.02]),
+            "int_v_k_dt": np.array([0.0, 0.0, 0.0, 0.0]),
+        }
+
+    monkeypatch.setattr(model, "simulate_mc", fake_simulate_mc)
+
+    out = model.ssr_fukasawa_all(
+        T=np.array([0.5, 1.0]),
+        n_mc=4,
+        n_disc=2,
+        n_loop=1,
+        seed=seed,
+        n_batch=n_batch,
+    )
+
+    def _expected_ssr(batch_seed):
+        level = (int(batch_seed) % 1000) / 100.0
+        int_v_dt = np.array([0.01, 0.01, 0.01, 0.01])
+        int_sqrt_v_dw = np.array([-level, -level, level, level]) * 0.1
+        S_T = model.s0 * np.exp(-0.5 * int_v_dt + int_sqrt_v_dw)
+        F = S_T.mean()
+        indicator = S_T < F
+        kernel = np.array([0.02, 0.02, 0.02, 0.02])
+        X = -np.mean(indicator * S_T * kernel) / (2.0 * F * model.xi0_0**0.5)
+        digit = np.mean(S_T >= F)
+        atm_impvol = _black_atm_impvol_from_price(
+            F=F, T=1.0, price=np.maximum(S_T - F, 0.0).mean()
+        )
+        d2 = -0.5 * atm_impvol
+        Y = stats.norm.cdf(d2) - digit
+        return X / Y
+
+    expected_per_batch = np.array(
+        [[_expected_ssr(bs), _expected_ssr(bs)] for bs in batch_seeds]
+    )
+    expected_mean = expected_per_batch.mean(axis=0)
+    expected_err = 1.96 * expected_per_batch.std(axis=0, ddof=1) / np.sqrt(n_batch)
+
+    assert np.allclose(out["ssr_fukasawa"], expected_mean)
+    assert np.allclose(out["ssr_fukasawa_low"], expected_mean - expected_err)
+    assert np.allclose(out["ssr_fukasawa_high"], expected_mean + expected_err)
+
+
+def test_ssr_fukasawa_all_single_batch_returns_point_estimate_only(monkeypatch):
+    model = _make_model()
+
+    def fake_simulate_mc(**kwargs):
+        return {
+            "int_v_dt": np.array([0.01, 0.01, 0.01, 0.01]),
+            "int_sqrt_v_dw": np.array([-0.1, -0.1, 0.1, 0.1]),
+            "int_sqrt_v_k_dw": np.array([0.02, 0.02, 0.02, 0.02]),
+            "int_v_k_dt": np.array([0.0, 0.0, 0.0, 0.0]),
+        }
+
+    monkeypatch.setattr(model, "simulate_mc", fake_simulate_mc)
+
+    out = model.ssr_fukasawa_all(T=1.0, n_mc=4, n_disc=2)
+
+    assert "ssr_fukasawa" in out
+    assert not any(key.endswith(("_low", "_high", "_stderr")) for key in out)
+
+
+@pytest.mark.parametrize("n_batch", [0, -1])
+def test_ssr_fukasawa_all_rejects_invalid_n_batch(n_batch):
+    model = _make_model()
+
+    with pytest.raises(ValueError, match="n_batch must be a positive integer"):
+        model.ssr_fukasawa_all(T=1.0, n_mc=4, n_disc=2, n_batch=n_batch)
 
 
 @pytest.mark.parametrize("conditioning", [False, True])

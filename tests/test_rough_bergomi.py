@@ -1,5 +1,6 @@
 import pytest
 import numpy as np
+
 from ssr import rough_bergomi
 from ssr.rough_bergomi import (
     RoughBergomiModel,
@@ -188,8 +189,10 @@ def test_rough_bergomi_integrals_jit_matches_vectorized_reduction():
     rng = np.random.default_rng(123)
     normal = rng.normal(size=(2 * n_disc, n_mc))
 
+    kappa = 0.5 + 0.1 * tab_t[:-1]
+
     out = _rough_bergomi_integrals_from_normal_jit(
-        normal, xi0_t, drift_t, shift_t, dt, eta, True
+        normal, xi0_t, drift_t, shift_t, dt, eta, True, kappa, True
     )
 
     y = np.empty((n_disc + 1, n_mc))
@@ -220,7 +223,43 @@ def test_rough_bergomi_integrals_jit_matches_vectorized_reduction():
         axis=0,
     )
 
+    expected_int_sqrt_v_k_dw = np.sum(
+        sqrt_v_prev[1:] * kappa[:-1, np.newaxis] * dw[1:], axis=0
+    )
+    expected_int_v_k_dt = dt * np.sum(v_next * kappa[:, np.newaxis], axis=0)
+
     assert np.allclose(out[0], expected_int_v_dt)
     assert np.allclose(out[1], expected_int_sqrt_v_dw)
     assert np.allclose(out[2], expected_int_v_dt_shifted)
     assert np.allclose(out[3], expected_int_sqrt_v_dw_shifted)
+    assert np.allclose(out[4], expected_int_sqrt_v_k_dw)
+    assert np.allclose(out[5], expected_int_v_k_dt)
+
+
+def test_fukasawa_kernel_right_point_matches_kernel():
+    model = RoughBergomiModel(
+        params={"eta": 1.3, "H": 0.15, "rho": -0.6},
+        xi0=lambda t: 0.04 * np.ones_like(t),
+    )
+    tab_t = np.array([0.0, 0.1, 0.4, 1.0])
+
+    def k(s):
+        return model.rho * model.eta * np.sqrt(2.0 * model.H) * s ** (model.H - 0.5)
+
+    expected = k(tab_t[1:])
+    actual = model._fukasawa_kernel_right_point(tab_t)
+    assert np.allclose(actual, expected)
+
+
+def test_ssr_fukasawa_close_to_finite_difference_ssr():
+    model = RoughBergomiModel(
+        params={"eta": 1.9, "H": 0.3, "rho": -0.9},
+        xi0=lambda t: 0.235**2 * np.ones_like(t),
+    )
+    T = np.array([0.5, 1.0])
+    out_fd = model.ssr_all(
+        T=T, n_mc=100_000, n_disc=200, eps_ssr=1e-3, n_quad=20, seed=1
+    )
+    out_fukasawa = model.ssr_fukasawa_all(T=T, n_mc=100_000, n_disc=200, seed=1)
+
+    assert np.allclose(out_fukasawa["ssr_fukasawa"], out_fd["ssr_fd"], atol=0.15)

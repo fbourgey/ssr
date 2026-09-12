@@ -11,6 +11,7 @@ Python research code for reproducing skew-stickiness ratio (SSR) results in stoc
 
 - Bourgey, F., Delemotte, J., & De Marco, S. (2026). *Refined expansions of the skew-stickiness ratio in stochastic volatility models*. [**Quantitative Finance**](https://doi.org/10.1080/14697688.2026.2714860), 1–18. Taylor & Francis. [SSRN 5387754](https://papers.ssrn.com/sol3/papers.cfm?abstract_id=5387754).
 - Bourgey, F., De Marco, S., & Delemotte, J. (2024). *Smile Dynamics and Rough Volatility*. [SSRN 4911186](https://papers.ssrn.com/sol3/papers.cfm?abstract_id=4911186).
+- Fukasawa, M. (2026). *On the Skew Stickiness Ratio*. [arXiv:2602.05241v2](https://arxiv.org/abs/2602.05241v2).
 
 ## Setup
 
@@ -40,6 +41,7 @@ The `ssr_expansions_*` notebooks reproduce results from *Refined expansions of t
 | [smile_dynamics_and_rough_vol.ipynb](smile_dynamics_and_rough_vol.ipynb) | Smile dynamics figures for Bergomi and rough Heston models, with market comparisons. |
 | [xi0.ipynb](xi0.ipynb) | Calibrated initial forward variance curves for all models. |
 | [checks.ipynb](checks.ipynb) | Numerical comparisons of SSR, ATM skew, and implied volatility methods. |
+| [ssr_fukasawa.ipynb](ssr_fukasawa.ipynb) | Fukasawa's estimator versus finite differences for two-factor and rough Bergomi. |
 
 Model code and calibrated inputs are in [`src/ssr/`](src/ssr/). Generated plots are stored under [`figures/`](figures/).
 

@@ -262,6 +262,18 @@ class ForwardVarianceModel(ABC):
         """
         pass
 
+    def _fukasawa_kernel_right_point(self, tab_t) -> np.ndarray:
+        """
+        Right-point kernel values kappa_i = k(t_{i+1}), for i = 0, ...,
+        n_disc - 1, where k = sum_i rho_i k_i is the kernel of Theorem 2
+        (Eq. 12) in Fukasawa (2026), "On the Skew Stickiness Ratio"
+        (arXiv:2602.05241), for the Bergomi-type model of Eq. (11) in that paper.
+
+        The right-point convention avoids k(0), which is singular for kernels such
+        as rough Bergomi's k(s) = rho eta sqrt(2H) s^(H-1/2), H < 1/2.
+        """
+        raise NotImplementedError("Theorem 2 kernel not implemented for this model.")
+
     def _clone_with_params(self, **updates):
         """Return a new model instance with updated params."""
         params = self.params.copy()
@@ -320,6 +332,7 @@ class ForwardVarianceModel(ABC):
         seed: int | None,
         conditioning: bool,
         eps_ssr: float,
+        eval_fukasawa: bool = False,
     ) -> dict:
         """
         Simulate Monte Carlo sample paths of the forward variance model.
@@ -341,6 +354,11 @@ class ForwardVarianceModel(ABC):
         eps_ssr: float, optional
             If != 0, also evaluate the Skew Stickiness Ratio (SSR).
             Default is 0.0 (i.e., do not evaluate SSR).
+        eval_fukasawa : bool, optional
+            If True, also accumulate the kernel-weighted integrals
+            `int sqrt(V_s) k(s) dB^1_s` and `int V_s k(s) ds` needed for the exact
+            SSR representation formula of Theorem 2 in Fukasawa (2026), "On the Skew
+            Stickiness Ratio" (arXiv:2602.05241). Default is False.
 
         Returns
         -------
@@ -350,6 +368,9 @@ class ForwardVarianceModel(ABC):
                     (shape: n_mc,)
                 - 'int_sqrt_v_dw': np.ndarray, stochastic integral for each path
                     (shape: n_mc,)
+                - 'int_sqrt_v_k_dw', 'int_v_k_dt': np.ndarray, kernel-weighted
+                    integrals for each path (shape: n_mc,), only if `eval_fukasawa`
+                    is True.
         """
         raise NotImplementedError(
             "Monte Carlo simulation not implemented for this model."
@@ -859,6 +880,139 @@ class ForwardVarianceModel(ABC):
 
         out = {}
         for key in ("ssr_fd", "ssr_vs", "beta", "atm_skew"):
+            values = np.asarray([batch_out[key] for batch_out in out_batch])
+            out[key] = values.mean(axis=0)
+            err = 1.96 * values.std(axis=0, ddof=1) / np.sqrt(n_batch)
+            out[f"{key}_low"] = out[key] - err
+            out[f"{key}_high"] = out[key] + err
+
+        return out
+
+    def ssr_fukasawa_all(
+        self,
+        T: float | np.ndarray,
+        n_mc: int,
+        n_disc: int,
+        n_loop: int = 1,
+        seed=None,
+        n_batch: int = 1,
+    ):
+        """
+        Estimate the SSR at t=0 from the exact representation formula R_0 = X_0/Y_0
+        of Theorem 2 in Fukasawa (2026), "On the Skew Stickiness Ratio"
+        (arXiv:2602.05241), for Bergomi-type models (Eq. 11 in that paper).
+
+        Unlike `ssr_mc_all`, this does not rely on finite-difference bumping of the
+        forward variance curve: both X_0 and Y_0 are estimated from a single,
+        un-bumped Monte Carlo simulation, using the kernel-weighted integrals
+        returned by `simulate_mc(..., eval_fukasawa=True)`.
+
+        Parameters
+        ----------
+        T : float or np.ndarray
+            Maturity.
+        n_mc : int
+            Number of Monte Carlo paths.
+        n_disc : int
+            Number of time discretization steps.
+        n_loop : int, optional
+            Number of simulation loops for memory efficiency. Default is 1.
+        seed : int or None, optional
+            Random seed for reproducibility. Default is None.
+        n_batch : int, optional
+            Number of independent Monte Carlo batches. If greater than 1, returns
+            batch-mean estimates and 95% confidence intervals. Default is 1.
+
+        Returns
+        -------
+        dict
+            Monte Carlo estimate for the Theorem 2 SSR (key `"ssr_fukasawa"`). If
+            `n_batch` is greater than 1, also includes 95% confidence intervals.
+        """
+        n_batch = int(n_batch)
+        if n_batch <= 0:
+            raise ValueError("n_batch must be a positive integer.")
+
+        n_loop = int(n_loop)
+        if n_loop <= 0:
+            raise ValueError("n_loop must be a positive integer.")
+
+        n_mc_loop, remainder = divmod(n_mc, n_loop)
+        if remainder != 0:
+            raise ValueError("n_mc must be divisible by n_loop")
+
+        T = np.atleast_1d(T)
+
+        print("\nComputing Fukasawa SSR:")
+        print("----------------")
+        print(f"Model: {self.__class__.__name__}")
+        print("Maturity T: ", T)
+        print(f"Monte Carlo paths: {n_mc}")
+        print(f"Number of time steps: {n_disc}")
+        print(f"Number of simulation loops: {n_loop}")
+        print(f"Number of independent batches: {n_batch}\n")
+
+        def _ssr_fukasawa_single(Ti, batch_seed):
+            paths = self.simulate_mc(
+                tab_t=np.linspace(0.0, Ti, n_disc + 1),
+                n_mc=n_mc,
+                n_loop=n_loop,
+                seed=batch_seed,
+                conditioning=False,
+                eps_ssr=0.0,
+                eval_fukasawa=True,
+            )
+            int_v_dt = paths["int_v_dt"]
+            int_sqrt_v_dw = paths["int_sqrt_v_dw"]
+            kernel_stoch = paths["int_sqrt_v_k_dw"]
+            kernel_drift = paths["int_v_k_dt"]
+
+            S_T = self.s0 * np.exp(-0.5 * int_v_dt + int_sqrt_v_dw)
+            F = S_T.mean()
+
+            atm_impvol = _black_atm_impvol_from_price(
+                F=F, T=Ti, price=np.maximum(S_T - F, 0.0).mean()
+            )
+            d2 = -0.5 * atm_impvol * Ti**0.5
+            digit = np.mean(S_T >= F)
+            Y = stats.norm.cdf(d2) - digit
+            if Y == 0.0:
+                raise ValueError("Estimated Y_0 is zero, cannot compute Theorem 2 SSR.")
+
+            indicator = S_T < F
+            X = -np.mean(indicator * S_T * (kernel_stoch - kernel_drift)) / (
+                2.0 * F * self.xi0_0**0.5
+            )
+
+            return (X / Y).item()
+
+        n_expiries = len(T)
+
+        def _ssr_fukasawa_with_progress(i, Ti, batch_seed):
+            print(f"{i}/{n_expiries}: expiry {Ti:.4f}")
+            return _ssr_fukasawa_single(Ti, batch_seed)
+
+        def _run_batch(batch_seed):
+            ssr_fukasawa = np.array(
+                [
+                    _ssr_fukasawa_with_progress(i, Ti, batch_seed)
+                    for i, Ti in enumerate(T, start=1)
+                ]
+            )
+            return {"ssr_fukasawa": ssr_fukasawa}
+
+        if n_batch == 1:
+            return _run_batch(seed)
+
+        rng = np.random.default_rng(seed)
+        batch_seeds = rng.integers(0, 2**32 - 1, size=n_batch)
+        out_batch = []
+        for i, batch_seed in enumerate(batch_seeds, start=1):
+            print(f"\nRunning batch {i}/{n_batch} with seed {batch_seed}")
+            out_batch.append(_run_batch(batch_seed))
+
+        out = {}
+        for key in ("ssr_fukasawa",):
             values = np.asarray([batch_out[key] for batch_out in out_batch])
             out[key] = values.mean(axis=0)
             err = 1.96 * values.std(axis=0, ddof=1) / np.sqrt(n_batch)
